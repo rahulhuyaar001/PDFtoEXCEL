@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF to Excel Hub</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    /* Global Styles */
+    body {
+      margin: 0;
+      font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%);
+      padding: 40px 20px;
+      box-sizing: border-box;
+    }
+
+    /* Grid Layout Container */
+    .tools-wrapper {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+      max-width: 1400px;
+      width: 100%;
+    }
+
+    /* Shared Card Styles (Glassmorphism) */
+    .tool-card {
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      display: flex;
+      flex-direction: column;
+      color: #fff;
+    }
+
+    /* Colors */
+    .amazon-card { background: rgba(255, 153, 0, 0.25); } 
+    .ekart-card { background: rgba(255, 87, 34, 0.25); }  
+    .generic-card { background: rgba(40, 167, 69, 0.25); } 
+
+    .tool-card h1 {
+      margin-top: 0; margin-bottom: 10px; font-size: 22px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+    }
+    .tool-card p {
+      font-size: 13px; margin-top: 0; margin-bottom: 25px; opacity: 0.9;
+    }
+
+    /* Inputs & Buttons */
+    .tool-input {
+      width: 100%; padding: 12px; margin-bottom: 20px;
+      border: 1px solid rgba(255,255,255,0.5); border-radius: 10px;
+      background: rgba(255,255,255,0.1); color: #fff;
+      box-sizing: border-box; font-family: inherit; cursor: pointer;
+    }
+    .tool-input::file-selector-button {
+      background: rgba(255,255,255,0.2); border: none; color: white;
+      padding: 5px 10px; border-radius: 5px; cursor: pointer; margin-right: 10px;
+    }
+    .tool-input::placeholder { color: rgba(255,255,255,0.7); }
+
+    .button-group { display: flex; gap: 10px; margin-top: auto; width: 100%; }
+
+    .tool-btn {
+      background: rgba(255,255,255,0.25); border: 1px solid rgba(255,255,255,0.4);
+      padding: 12px 10px; border-radius: 10px; color: #fff;
+      font-size: 14px; font-weight: bold; cursor: pointer; transition: 0.3s; flex: 1; 
+    }
+    .tool-btn:hover { background: rgba(255,255,255,0.4); }
+    .tool-btn:disabled { background: rgba(255,255,255,0.1); cursor: not-allowed; color: rgba(255,255,255,0.5); }
+
+    .clear-btn {
+      background: rgba(255, 99, 71, 0.25); border: 1px solid rgba(255, 99, 71, 0.4); flex: 0.5;
+    }
+    .clear-btn:hover { background: rgba(255, 99, 71, 0.5); }
+
+    .status { margin-top: 15px; font-size: 14px; font-weight: bold; min-height: 20px; }
+    .success { color: #a5d6a7; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+    .error { color: #ef9a9a; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
+  </style>
+</head>
+<body>
+
+  <div class="tools-wrapper">
+    
+    <div class="tool-card amazon-card">
+      <h1>Amazon to Excel</h1>
+      <p>Extract Order No, Sold By, Customer Name, Addr, Description, SKU & Amount</p>
+      <input type="file" id="amazonPdfInput" class="tool-input" accept="application/pdf" multiple>
+      <div class="button-group">
+        <button id="amazonExtractBtn" class="tool-btn">Export</button>
+        <button id="clearAmazonBtn" class="tool-btn clear-btn">Clear</button>
+      </div>
+      <div id="amazonStatus" class="status"></div>
+    </div>
+
+    <div class="tool-card ekart-card">
+      <h1>Flipkart / E-Kart to Excel</h1>
+      <p>Extracts Order No, Company, AWB/Tracking ID, Name, Full Address, SKU, Description, Qty & Price</p>
+      <input type="file" id="ekartPdfInput" class="tool-input" accept="application/pdf" multiple>
+      <div class="button-group">
+        <button id="ekartExtractBtn" class="tool-btn">Export</button>
+        <button id="clearEkartBtn" class="tool-btn clear-btn">Clear</button>
+      </div>
+      <div id="ekartStatus" class="status"></div>
+    </div>
+
+    <div class="tool-card generic-card">
+      <h1>Meesho / Fixed to Excel</h1>
+      <p>Extracts Order No, Tracking ID, Company, Name, Address, Delivery Partner, SKU, Description, Qty & Amount</p>
+      <input type="file" id="genericPdfInput" class="tool-input" accept="application/pdf" multiple>
+      <div class="button-group">
+        <button id="genericExtractBtn" class="tool-btn">Export</button>
+        <button id="clearGenericBtn" class="tool-btn clear-btn">Clear</button>
+      </div>
+      <div id="genericStatus" class="status"></div>
+    </div>
+
+  </div>
+
+  <script>
+    // Global Config
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    
+    // Helper to find Indian States
+    const indianStatesList = ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Delhi", "New Delhi", "Jammu", "Kashmir", "Ladakh", "Chandigarh", "Puducherry"];
+
+    // Central Tracking Regex
+    const trackingRegex = /\b(VL[A-Z0-9]+|FMPP[A-Z0-9]+|FMP[A-Z0-9]+|SF[A-Z0-9]+FPL|CC[0-9A-Z]{8,}|1[34][0-9]{12,14}|3[0-9]{13}|7[0-9]{9,10})\b/i;
+
+    /* ==========================================
+       1. AMAZON INVOICE EXTRACTOR 
+       ========================================== */
+    const amazonExtractBtn = document.getElementById('amazonExtractBtn');
+    amazonExtractBtn.addEventListener('click', async () => {
+      const files = document.getElementById('amazonPdfInput').files;
+      const status = document.getElementById('amazonStatus');
+      if (!files.length) { status.textContent = 'Upload PDF first.'; status.className = 'status error'; return; }
+      
+      amazonExtractBtn.disabled = true; amazonExtractBtn.textContent = 'Extracting...'; status.textContent = '';
+      let excelData = [];
+
+      try {
+        for (let file of files) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          
+          for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+            const page = await pdf.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const textItems = textContent.items.map(item => item.str.trim()).filter(s => s.length > 0);
+            const fullText = textItems.join(' '); 
+
+            const orderMatch = fullText.match(/Order Number\s*[:\s]+([0-9-]+)/i) || fullText.match(/Order Id\s*[:\s]+([0-9-]+)/i);
+            
+            let name = "Not Found", address = "Not Found", state = "Not Found", total = "0.00", products = [], currentItemNumber = 1; 
+
+            let sellerName = "Not Found", sellerAddress = "Not Found";
+            let soldByIdx = textItems.findIndex(item => /Sold By/i.test(item));
+
+            if (soldByIdx !== -1) {
+                let soldByText = textItems[soldByIdx];
+                let splitText = soldByText.split(/Sold By\s*[:\-]?\s*/i);
+                let k = soldByIdx + 1;
+
+                if (splitText.length > 1 && splitText[1].trim() !== "") {
+                    sellerName = splitText[1].trim();
+                } else {
+                    if (textItems[k] === ":" || textItems[k].trim() === "") k++;
+                    sellerName = textItems[k] ? textItems[k].trim() : "Not Found";
+                    k++;
+                }
+
+                let addrParts = [];
+                while (k < textItems.length && k < soldByIdx + 20) {
+                    let txt = textItems[k].trim();
+                    if (txt !== "") {
+                        if (/PAN No/i.test(txt) || /GST/i.test(txt) || /Billing Address/i.test(txt) || txt.includes("Registration No")) break;
+                        addrParts.push(txt);
+                    }
+                    k++;
+                }
+                if (addrParts.length > 0) sellerAddress = addrParts.join(" ");
+            }
+
+            let totalTextIndex = textItems.findIndex(item => item.includes("TOTAL:") || item === "TOTAL:");
+            let amtWordsIdx = textItems.findIndex(item => item.includes("Amount in Words"));
+            
+            if (totalTextIndex !== -1 && amtWordsIdx !== -1 && amtWordsIdx > totalTextIndex) {
+                let blockText = textItems.slice(totalTextIndex, amtWordsIdx).join(" ");
+                let priceMatches = [...blockText.matchAll(/(?:₹|Rs\.?|INR)?\s*(\d[\d,]*\.\d{2})/gi)];
+                if (priceMatches.length > 0) {
+                    total = priceMatches[priceMatches.length - 1][1]; 
+                }
+            } 
+            
+            if (total === "0.00") {
+                const fallbackPrices = [...fullText.matchAll(/(?:Grand\s*Total|Total|Amount\s*Payable)\s*[:]?\s*(?:₹|Rs\.?)?\s*(\d[\d,]*\.\d{2})/gi)];
+                if(fallbackPrices.length > 0) {
+                    total = fallbackPrices[fallbackPrices.length - 1][1];
+                }
+            }
+
+            let stopItemSearch = false;
+            for (let i = 0; i < textItems.length; i++) {
+              if (textItems[i].includes("Amount in Words") || /TOTAL\s*:/i.test(textItems[i])) {
+                  stopItemSearch = true;
+              }
+
+              if (textItems[i].includes("Shipping Address") || textItems[i].includes("Ship To:")) {
+                let k = i + 1;
+                if (textItems[k] === ":" || textItems[k] === "") k++;
+                name = textItems[k]; k++;
+                if (textItems[k] === name) k++; 
+                
+                let addrParts = [];
+                while (k < textItems.length && k < i + 15) {
+                  let txt = textItems[k];
+                  if (txt === "IN" || txt.includes("State/UT Code") || txt.includes("Place of supply") || txt.includes("Landmark:") || txt.includes("Invoice Number")) break;
+                  addrParts.push(txt); k++;
+                }
+                address = addrParts.join(" ");
+
+                let pinMatch = address.match(/(.+?)\s*(\d{6})\s*([A-Za-z]+)?/);
+                if (pinMatch) {
+                    if (pinMatch[3] && pinMatch[3].trim().length > 2 && pinMatch[3].toUpperCase() !== "IN") {
+                        state = pinMatch[3].trim();
+                    } else {
+                        let sParts = pinMatch[1].split(',').map(s => s.trim()).filter(s => s.length > 0);
+                        state = sParts[sParts.length - 1];
+                    }
+                }
+              }
+
+              if (!stopItemSearch && textItems[i] === currentItemNumber.toString()) {
+                  if (textItems[i+1] && textItems[i+1].length > 2 && !/^(?:₹|Rs\.?)/i.test(textItems[i+1])) {
+                      let descriptionParts = [], k = i + 1, qty = "1";
+                      while (k < textItems.length && k < i + 15) { 
+                          let txt = textItems[k];
+                          if (/^(?:₹|Rs\.?)\s*\d/i.test(txt) || /^(IGST|CGST|SGST)/i.test(txt) || txt.includes("Amount in Words")) break;
+                          descriptionParts.push(txt); k++;
+                      }
+                      
+                      let fullDesc = descriptionParts.join(" ");
+                      fullDesc = fullDesc.split(/(?:₹|Rs\.?)\s*\d/i)[0].split(/IGST|CGST|SGST|TOTAL|Amount in|HSN/i)[0].trim();
+                      fullDesc = fullDesc.replace(/[\s|]+$/, '').trim(); 
+
+                      let extractedDesc = fullDesc;
+                      let extractedSku = "Not Found"; 
+
+                      let bracketMatches = [...fullDesc.matchAll(/\(\s*([^)]+?)\s*\)/g)];
+                      if (bracketMatches.length > 0) {
+                          extractedSku = bracketMatches[bracketMatches.length - 1][1].trim();
+                          extractedDesc = fullDesc.substring(0, fullDesc.lastIndexOf("(")).trim();
+                          extractedDesc = extractedDesc.replace(/[\s|]+$/, '').trim();
+                      }
+                      
+                      for(let q = k; q <= k + 6 && q < textItems.length; q++) {
+                          if (textItems[q].includes("Amount in Words") || textItems[q].includes("TOTAL")) break;
+                          if (/^\d+$/.test(textItems[q]) && textItems[q].length < 4) { qty = textItems[q]; break; }
+                      }
+                      
+                      if (fullDesc.length > 2 && !/^(IGST|CGST|SGST|TOTAL)$/i.test(fullDesc)) {
+                          products.push({ description: extractedDesc, sku: extractedSku, qty: qty });
+                          currentItemNumber++;
+                      }
+                  }
+              }
+            }
+
+            if (orderMatch) {
+              if (products.length > 0) {
+                 let combinedDescription = products.map(p => p.description).join(" | ");
+                 let combinedSku = products.map(p => p.sku).join(" | ");
+                 let combinedQty = products.map(p => p.qty).join(", ");
+
+                 excelData.push({ 
+                    "Order Number": orderMatch[1],
+                    "Sold By (Seller)": sellerName, 
+                    "Seller Address": sellerAddress, 
+                    "Customer Name": name, 
+                    "Customer Address": address, 
+                    "State": state, 
+                    "Item Description": combinedDescription, 
+                    "Item SKU": combinedSku,
+                    "Qty": combinedQty, 
+                    "Total Amount (₹)": total, 
+                    "File Name": file.name, 
+                    "Page No": pageNum 
+                 });
+              } else {
+                 excelData.push({ 
+                    "Order Number": orderMatch[1],
+                    "Sold By (Seller)": sellerName, 
+                    "Seller Address": sellerAddress, 
+                    "Customer Name": name, 
+                    "Customer Address": address, 
+                    "State": state, 
+                    "Item Description": "Not Found", 
+                    "Item SKU": "Not Found",
+                    "Qty": "1", 
+                    "Total Amount (₹)": total, 
+                    "File Name": file.name, 
+                    "Page No": pageNum 
+                 });
+              }
+            }
+          }
+        }
+        if (excelData.length === 0) { status.textContent = 'No data found.'; status.className = 'status error'; return; }
+        const ws = XLSX.utils.json_to_sheet(excelData); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Amazon_Invoices"); XLSX.writeFile(wb, "Amazon_Data.xlsx");
+        status.textContent = `✅ ${excelData.length} Rows Extracted!`; status.className = 'status success';
+      } catch (error) { status.textContent = 'Error extracting data.'; status.className = 'status error'; } finally { amazonExtractBtn.disabled = false; amazonExtractBtn.textContent = 'Export'; }
+    });
+    document.getElementById('clearAmazonBtn').addEventListener('click', () => { document.getElementById('amazonPdfInput').value = ''; document.getElementById('amazonStatus').textContent = ''; });
+
+    /* ==========================================
+       2. FLIPKART / E-KART LABELS EXTRACTOR
+       ========================================== */
+    const ekartExtractBtn = document.getElementById("ekartExtractBtn");
+    ekartExtractBtn.addEventListener("click", async () => {
+        const files = document.getElementById("ekartPdfInput").files;
+        const status = document.getElementById("ekartStatus");
+        if (!files.length) { status.innerText = "Upload PDF first."; status.className = 'status error'; return; }
+
+        ekartExtractBtn.disabled = true; ekartExtractBtn.innerText = "Processing..."; status.innerText = "";
+        try {
+            let extractedData = [];
+            for(let file of files) {
+                const arrayBuffer = await file.arrayBuffer(); const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i); const textContent = await page.getTextContent();
+                    const textItems = textContent.items.map(item => item.str.trim()).filter(str => str !== "");
+                    const pageText = textItems.join(" ");
+
+                    let orderID = "Not Found", awbNo = "Not Found", customerName = "Not Found", fullAddress = "Not Found", state = "Not Found", totalAmount = "0.00", companyName = "Not Found";
+                    
+                    const odMatch = pageText.match(/(OD\d{15,})/); if (odMatch) orderID = odMatch[1];
+                    
+                    let paymentStatus = /\bCOD\b|Cash on Delivery/i.test(pageText) ? "COD" : "Prepaid";
+
+                    const awbMatch1 = pageText.match(/AWB No\.?\s*([A-Z0-9]+)/i);
+                    const awbMatch2 = pageText.match(trackingRegex);
+                    if (awbMatch1) awbNo = awbMatch1[1];
+                    else if (awbMatch2) awbNo = awbMatch2[0];
+
+                    const nameMatch = pageText.match(/Name:\s*([^,]+)/i); if (nameMatch) customerName = nameMatch[1].trim();
+
+                    const sellerMatch = pageText.match(/Sold By\s*[:\-]?\s*([^,]+)/i);
+                    if (sellerMatch) companyName = sellerMatch[1].trim();
+
+                    const priceRegex = /(?:TOTAL PRICE|Amount to be Collected|Collectable Amount|Invoice Value|Grand Total)\s*[:\-]?\s*(?:₹|Rs\.?)?\s*(\d[\d,]*\.\d{2})/gi;
+                    const priceMatches = [...pageText.matchAll(priceRegex)];
+
+                    if (priceMatches.length > 0) {
+                        totalAmount = priceMatches[priceMatches.length - 1][1];
+                    } else {
+                        const fallbackRegex = /(?:Total|Rs\.?|₹)\s*[:\-]?\s*(\d[\d,]*\.\d{2})/gi;
+                        const fallbackMatches = [...pageText.matchAll(fallbackRegex)];
+                        if (fallbackMatches.length > 0) {
+                            totalAmount = fallbackMatches[fallbackMatches.length - 1][1];
+                        }
+                    }
+
+                    let nameIndex = textItems.findIndex(item => item.match(/Name:/i));
+                    if (nameIndex !== -1) {
+                        let addrParts = [];
+                        let k = nameIndex + 1;
+                        while (k < textItems.length && k < nameIndex + 15) {
+                            let txt = textItems[k];
+                            if (txt.match(/HBD:/i) || txt.match(/CPD:/i) || txt.match(/Sold By:/i) || txt.match(/SKU ID/i) || txt.includes("Ordered through")) break;
+                            addrParts.push(txt);
+                            k++;
+                        }
+                        if (addrParts.length > 0) fullAddress = addrParts.join(" ");
+
+                        for (let sScan = nameIndex; sScan < nameIndex + 25 && sScan < textItems.length; sScan++) {
+                            let txt = textItems[sScan];
+                            let matchedState = indianStatesList.find(s => new RegExp(`\\b${s}\\b`, 'i').test(txt));
+                            if (matchedState) { state = matchedState; break; }
+                        }
+                    }
+
+                    let skuStartIndex = textItems.findIndex(item => item.includes("SKU ID | Description"));
+                    let finalProducts = [];
+
+                    if (skuStartIndex !== -1) {
+                        let currentSerial = 1;
+                        let currentSkuParts = [];
+                        let currentQty = "1";
+
+                        for (let j = skuStartIndex + 1; j < textItems.length; j++) {
+                            let item = textItems[j];
+                            
+                            if (item.match(/^FMP[A-Z0-9]+/i) || item.includes("STD E") || item.includes("Ordered through") || item.includes("Not for resale") || item.includes("Sold By:")) {
+                                if (currentSkuParts.length > 0) {
+                                    finalProducts.push({ parts: currentSkuParts, qty: currentQty });
+                                }
+                                break;
+                            }
+                            
+                            if (item === "QTY") continue;
+
+                            if (item === currentSerial.toString()) {
+                                if (currentSkuParts.length > 0) {
+                                    finalProducts.push({ parts: currentSkuParts, qty: currentQty });
+                                    currentSkuParts = [];
+                                    currentQty = "1";
+                                }
+                                currentSerial++;
+                                continue;
+                            }
+                            
+                            if (/^\d+$/.test(item) && item.length <= 3) {
+                                currentQty = item;
+                            } else {
+                                currentSkuParts.push(item);
+                            }
+                        }
+                    }
+
+                    let parsedItems = [];
+                    if (finalProducts.length > 0) {
+                        for (let p of finalProducts) {
+                            let fullSkuText = p.parts.join(" ");
+                            let skuSplit = fullSkuText.split("|");
+                            
+                            let pSkuID = skuSplit[0].trim();
+                            pSkuID = pSkuID.replace(/^\d+\s+/, '').trim(); 
+
+                            let pSkuDesc = skuSplit.length > 1 ? skuSplit.slice(1).join("|").trim() : pSkuID;
+                            
+                            parsedItems.push({ skuID: pSkuID, skuDesc: pSkuDesc, qty: p.qty });
+                        }
+                    } else {
+                        parsedItems.push({ skuID: "Not Found", skuDesc: "Not Found", qty: "1" });
+                    }
+
+                    // --- QUANTITY MERGE LOGIC (DUPLICATE SKU HANDLING) ---
+                    let aggregatedItems = [];
+                    for (let item of parsedItems) {
+                        let existing = aggregatedItems.find(i => i.skuID === item.skuID);
+                        if (existing) {
+                            // Agar SKU pehle se hai, toh uski Quantity me nayi Quantity PLUS kar do
+                            let oldQty = parseInt(existing.qty) || 1;
+                            let newQty = parseInt(item.qty) || 1;
+                            existing.qty = (oldQty + newQty).toString();
+                        } else {
+                            // Naya SKU mila toh usko array me dal do
+                            aggregatedItems.push({ ...item });
+                        }
+                    }
+                    parsedItems = aggregatedItems; // Replace with Aggregated list
+
+                    // Tax Invoice Description Fallback
+                    if (parsedItems.length === 1) {
+                        let invoiceProdMatch = pageText.match(/Product\s+Description.*?(?:Total|TOTAL)\s+(.*?)\s+HSN/i);
+                        if (invoiceProdMatch) {
+                            let fullProdString = invoiceProdMatch[1].replace(/\[\[\]\]/g, '').trim();
+                            let splitParts = fullProdString.split("|").map(s => s.trim());
+                            
+                            if (splitParts.length >= 2) {
+                                parsedItems[0].skuDesc = splitParts[0]; 
+                                if(parsedItems[0].skuID === "Not Found" || parsedItems[0].skuID === "") {
+                                    parsedItems[0].skuID = splitParts[1];
+                                }
+                            } else if (splitParts.length === 1 && splitParts[0] !== "") {
+                                parsedItems[0].skuDesc = splitParts[0];
+                            }
+                        }
+                    }
+                    
+                    let isFirstItemInOrder = true;
+                    for (let item of parsedItems) {
+                        if (item.skuID.includes("|")) {
+                            item.skuID = item.skuID.split("|")[0].trim();
+                        }
+                        if (orderID !== "Not Found" || customerName !== "Not Found") {
+                            let rowAmount = isFirstItemInOrder ? totalAmount : "0.00";
+                            extractedData.push([orderID, companyName, awbNo, customerName, fullAddress, state, item.skuID, item.skuDesc, item.qty, rowAmount, paymentStatus, i]);
+                            isFirstItemInOrder = false; 
+                        }
+                    }
+                }
+            }
+            if (extractedData.length === 0) { status.innerText = "No data found."; status.className = 'status error'; return; }
+            
+            const ws_data = [["Order No.", "Company Name", "AWB No.", "Customer Name", "Full Address", "State", "SKU ID", "Description", "Qty", "Total Amount (₹)", "Payment Status", "Page No."], ...extractedData];
+            const ws = XLSX.utils.aoa_to_sheet(ws_data); const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "EKart_Orders"); XLSX.writeFile(wb, "EKart_Labels.xlsx");
+            
+            status.innerText = `✅ ${extractedData.length} records generated!`; status.className = 'status success';
+        } catch (error) { status.innerText = "Error parsing E-Kart PDF."; status.className = 'status error';
+        } finally { ekartExtractBtn.disabled = false; ekartExtractBtn.innerText = "Export"; }
+    });
+    document.getElementById('clearEkartBtn').addEventListener('click', () => { document.getElementById('ekartPdfInput').value = ''; document.getElementById('ekartStatus').textContent = ''; });
+
+    /* ==========================================
+       3. MEESHO / FIXED DATA EXTRACTOR
+       ========================================== */
+    const genericExtractBtn = document.getElementById("genericExtractBtn");
+    genericExtractBtn.addEventListener("click", async () => {
+        const files = document.getElementById("genericPdfInput").files;
+        const status = document.getElementById("genericStatus");
+        if (!files.length) { status.innerText = "Upload PDF first."; status.className = 'status error'; return; }
+
+        genericExtractBtn.disabled = true; genericExtractBtn.innerText = "Processing..."; status.innerText = "";
+        try {
+            let extractedData = [];
+            for(let file of files) {
+                const arrayBuffer = await file.arrayBuffer(); 
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i); 
+                    const textContent = await page.getTextContent();
+                    const textItems = textContent.items.map(item => item.str.trim()); 
+                    const pageText = textItems.join(" ");
+                    
+                    let customerName = "Not Found", fullAddress = "Not Found", state = "Not Found", productSku = "Not Found", description = "Not Found", quantity = "Not Found", orderNumber = "Not Found", totalAmount = "0.00", courierPartner = "Not Found", companyName = "Not Found";
+
+                    let paymentStatus = /\bCOD\b|Cash on Delivery/i.test(pageText) ? "COD" : "Prepaid";
+
+                    let trackingID = "Not Found";
+                    let trackMatch = pageText.match(trackingRegex);
+                    if(trackMatch) {
+                        trackingID = trackMatch[0];
+                    }
+
+                    let sellerIdx = textItems.findIndex(txt => /Sold By|Seller Name|Supplier/i.test(txt));
+                    if (sellerIdx !== -1) {
+                        let txt = textItems[sellerIdx];
+                        let split = txt.split(/Sold By\s*[:\-]?\s*|Seller Name\s*[:\-]?\s*|Supplier\s*[:\-]?\s*/i);
+                        if (split.length > 1 && split[1].trim() !== "") {
+                            companyName = split[1].trim();
+                        } else {
+                            let k = sellerIdx + 1;
+                            while (k < textItems.length && (textItems[k].trim() === "" || textItems[k].trim() === ":")) k++;
+                            if (k < textItems.length) companyName = textItems[k].trim();
+                        }
+                    }
+
+                    let logisticsIdx = textItems.findIndex(txt => /Logistics Partner|Courier|Delivery Partner|Shipping Partner/i.test(txt));
+                    if (logisticsIdx !== -1) {
+                        let k = logisticsIdx + 1;
+                        while (k < textItems.length && (textItems[k].trim() === "" || textItems[k].trim() === ":" || textItems[k].trim() === "-")) {
+                            k++;
+                        }
+                        if (k < textItems.length) {
+                            courierPartner = textItems[k].trim();
+                        }
+                    }
+                    
+                    if (courierPartner === "Not Found" || courierPartner.length > 40) {
+                        const couriersRegex = /(valmoplus|valmo|delhivery|shadowfax|ecom\s*express|xpress\s*bees|xpressbees|blue\s*dart|smartr|ekart|amazon\s*shipping|loadshare|udaan)/i;
+                        const courierMatch = pageText.match(couriersRegex);
+                        if (courierMatch) {
+                            courierPartner = courierMatch[0].trim();
+                            if (/xpress\s*bees/i.test(courierPartner)) courierPartner = "Xpressbees";
+                        } else {
+                            for(let j=0; j < Math.min(textItems.length, 250); j++){
+                                let txt = textItems[j].toLowerCase();
+                                if(txt === "pickup" || txt === "surface") {
+                                    if(j > 0 && textItems[j-1].length > 2 && !textItems[j-1].toLowerCase().includes("cash")) {
+                                        courierPartner = textItems[j-1]; break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (let j = 0; j < textItems.length; j++) {
+                        if (textItems[j] === "Customer Address" || textItems[j] === "Customer Name") {
+                            let k = j + 1; while (k < textItems.length && textItems[k] === "") k++;
+                            if (k < textItems.length) {
+                                customerName = textItems[k]; 
+                            }
+                            break; 
+                        }
+                    }
+
+                    let billToIdx = textItems.findIndex(txt => txt.includes("BILL TO / SHIP TO") || txt.includes("BILL TO/SHIP TO"));
+                    if (billToIdx !== -1) {
+                        let addrArr = [];
+                        let k = billToIdx + 1;
+                        while (k < textItems.length && k < billToIdx + 15) {
+                            let txt = textItems[k].trim();
+                            if (txt.includes("Sold by") || txt.includes("GSTIN") || txt.includes("Purchase Order")) break;
+                            addrArr.push(txt);
+                            k++;
+                        }
+                        let joinedAddr = addrArr.join(" ");
+
+                        let posMatch = joinedAddr.match(/Place of Supply\s*:\s*([A-Za-z\s]+)/i);
+                        if (posMatch) {
+                            state = posMatch[1].trim();
+                        } else {
+                            let matchedState = indianStatesList.find(s => new RegExp(`\\b${s}\\b`, 'i').test(joinedAddr));
+                            if (matchedState) state = matchedState;
+                        }
+
+                        let addrMatch = joinedAddr.match(/-\s*(.*?)(?:,\s*Place of Supply|Place of Supply)/i);
+                        if (addrMatch) {
+                            fullAddress = addrMatch[1].trim();
+                            fullAddress = fullAddress.replace(/,+$/, '').trim(); 
+                        } else {
+                            let altMatch = joinedAddr.match(/(.*?)(?:,\s*Place of Supply|Place of Supply)/i);
+                            if (altMatch) {
+                                fullAddress = altMatch[1].trim();
+                            }
+                        }
+                    }
+                    
+                    const tableRegex = /Order No\.\s+(\S+)\s+(.+?)\s+(\d+)\s+([a-zA-Z]+)\s+(\d{16,}(?:[_\s]\d+)?)/;
+                    const match = pageText.match(tableRegex);
+                    if (match) { productSku = match[1]; quantity = match[3]; orderNumber = match[5].replace(/\s+/g, '_'); } 
+                    else { 
+                        const orderHunt = pageText.match(/(\d{16,}(?:[_\s]\d+)?)/); 
+                        if (orderHunt) orderNumber = orderHunt[1].replace(/\s+/g, '_'); 
+                        
+                        let skuIdx = textItems.indexOf("SKU");
+                        if(skuIdx !== -1) {
+                            let s = skuIdx + 1; while(s < textItems.length && textItems[s] === "") s++;
+                            if(s < textItems.length) productSku = textItems[s];
+                        }
+                        
+                        let qtyIdx = textItems.indexOf("Qty");
+                        if(qtyIdx !== -1) {
+                            for(let q = qtyIdx+1; q < qtyIdx+5; q++){
+                                if(/^\d+$/.test(textItems[q])){ quantity = textItems[q]; break; }
+                            }
+                        }
+                    }
+
+                    const rsMatches = [...pageText.matchAll(/Rs\.\s*(\d[\d,]*\.\d{2})/g)];
+                    if (rsMatches.length > 0) totalAmount = rsMatches[rsMatches.length - 1][1];
+
+                    let descHeaderIdx = textItems.findIndex(txt => txt === "Description");
+                    let hsnHeaderIdx = textItems.findIndex(txt => txt === "HSN");
+                    
+                    if (descHeaderIdx !== -1 && hsnHeaderIdx !== -1) {
+                        let totalHeaderIdx = textItems.indexOf("Total", descHeaderIdx); 
+                        if (totalHeaderIdx !== -1) {
+                            let k = totalHeaderIdx + 1;
+                            let descParts = [];
+                            while (k < textItems.length) {
+                                let txt = textItems[k].trim();
+                                if (txt === "" || txt === "Tax Invoice" || txt === "Original For Recipient" || txt.includes("BILL TO")) { k++; continue; }
+                                if (/^\d{4,8}$/.test(txt)) break; 
+                                if (txt.includes("Other Charges") || txt.includes("Shipping") || /^Rs\./i.test(txt)) break; 
+                                descParts.push(txt);
+                                k++;
+                            }
+                            if (descParts.length > 0) description = descParts.join(" ");
+                        }
+                    }
+
+                    if (customerName !== "Not Found" || orderNumber !== "Not Found") {
+                        extractedData.push([orderNumber, trackingID, companyName, customerName, fullAddress, state, courierPartner, productSku, description, quantity, totalAmount, paymentStatus, i]);
+                    }
+                }
+            }
+            if (extractedData.length === 0) { status.innerText = "No data found."; status.className = 'status error'; return; }
+            
+            const ws_data = [["Order Reference No.", "Tracking ID / AWB", "Company Name", "Customer Full Name", "Customer Address", "State", "Delivery Partner", "Item SKU", "Item Description", "Qty", "Total Amount (Rs.)", "Payment Status", "Page No."], ...extractedData];
+            const ws = XLSX.utils.aoa_to_sheet(ws_data); const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Meesho_Orders"); XLSX.writeFile(wb, "Meesho_Order_Data.xlsx");
+            
+            status.innerText = `✅ ${extractedData.length} records generated!`; status.className = 'status success';
+        } catch (error) { console.error(error); status.innerText = "Something went wrong."; status.className = 'status error';
+        } finally { genericExtractBtn.disabled = false; genericExtractBtn.innerText = "Export"; }
+    });
+    document.getElementById('clearGenericBtn').addEventListener('click', () => { document.getElementById('genericPdfInput').value = ''; document.getElementById('genericStatus').textContent = ''; });
+
+  </script>
+</body>
+</html>
